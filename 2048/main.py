@@ -6,7 +6,9 @@ import random
 
 
 class Square(pg.sprite.Sprite):
+    # размер квадрата
     size = 0
+    # отступ между квадратами
     margin = 5
 
     def __init__(self, screen, color, x, y, field_coordinates):
@@ -77,14 +79,17 @@ class Block(Square):
 
     def __init__(self, screen, color, x, y, field_coordinates, points):
         super().__init__(screen, color, x, y, field_coordinates)
-        self.points = points  #
+        self.points = points  # количество очков (отображается внутри блока)
+        self.points_were_changed = False # за один ход очки у блока можно менять только один раз
         self.color = Block.colors[points]
         pg.font.init()
         self.font = pg.font.SysFont("Arial", int(Square.size * 0.6))
         self.all_blocks.add(self)
 
-    def del_block(self):
-        Block.all_blocks.remove(self)
+    @classmethod
+    def set_status_changed(cls):
+        for block in cls.all_blocks:
+            block.points_were_changed = False
 
     def move(self, direction_x, direction_y):
         # текущее положение относительно поля
@@ -101,44 +106,44 @@ class Block(Square):
             else:
                 cell_before = Field.field[new_y][new_x]
                 if cell_before.block_in_cell.points == self.points:
+                    if cell_before.block_in_cell.points_were_changed or self.points_were_changed:
+                        # если блок уже менял свои очки
+                        return
                     # произойдет слияние блоков
                     Field.field[curr_y][curr_x].is_free = True
                     cell_before.block_in_cell.points *= 2
+                    cell_before.block_in_cell.points_were_changed = True
                     cell_before.block_in_cell.color = Block.colors[cell_before.block_in_cell.points]
                     Block.all_blocks.remove(self)
-                    return -1 # слияние произошло
+
 
 
     @classmethod
     def move_all(cls, direction):
-        stop = False # если произойдёт слияние, надо выйти из цикла
         if direction == 'right':
             for row in Field.field:
                 for cell in row[::-1]:
                     if not cell.is_free:
-                        if cell.block_in_cell.move(1, 0) == -1:
-                            stop = True
+                        cell.block_in_cell.move(1, 0)
+
         elif direction == 'left':
             for row in Field.field:
                 for cell in row:
                     if not cell.is_free:
-                        if cell.block_in_cell.move(-1, 0) == -1:
-                            stop = True
+                        cell.block_in_cell.move(-1, 0)
         elif direction == 'up':
             for ind_collumn in range(Game.count_cells):
                 collumn = Field.field[:, ind_collumn]
                 for cell in collumn:
                     if not cell.is_free:
-                        if cell.block_in_cell.move(0, -1) == -1:
-                            stop = True
+                        cell.block_in_cell.move(0, -1)
         elif direction == 'down':
             for ind_collumn in range(Game.count_cells):
                 collumn = Field.field[:, ind_collumn]
                 for cell in collumn[::-1]:
                     if not cell.is_free:
-                        if cell.block_in_cell.move(0, 1) == -1:
-                            stop = True
-        return stop
+                        cell.block_in_cell.move(0, 1)
+
 
     def update(self, *args, **kwargs):
         self.image.fill(self.color)
@@ -152,7 +157,6 @@ class Field:
     field = None
 
     def __init__(self, screen, screen_info):
-        # размер игрового поля
         self.screen = screen
         self.screen_info = screen_info
         self.block = None  # здесь будет храниться блок
@@ -222,18 +226,15 @@ class Game:
                     return
                 elif event.type == pg.KEYDOWN:
                     for i in range(Game.count_cells):
-                        stop = False
                         if event.key == pg.K_UP:
-                            stop = Block.move_all('up')
+                            Block.move_all('up')
                         elif event.key == pg.K_DOWN:
-                            stop = Block.move_all('down')
+                            Block.move_all('down')
                         elif event.key == pg.K_LEFT:
-                            stop = Block.move_all('left')
+                            Block.move_all('left')
                         elif event.key == pg.K_RIGHT:
-                            stop = Block.move_all('right')
+                            Block.move_all('right')
 
-                        if stop:  # где-то произошло слияние блоков
-                            break
 
                         Cell.all_cells.update()
                         Block.all_blocks.update()
@@ -241,6 +242,7 @@ class Game:
                         time.sleep(0.025)
 
                     self.board.spawn_block(pg.Color('0xd5bdaf'), 1)
+                    Block.set_status_changed()
 
             Cell.all_cells.update()
             Block.all_blocks.update()
